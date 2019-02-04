@@ -131,7 +131,7 @@ public class AppService extends Service
 
                     checkResponse(response);
 
-                    Thread.sleep(10000);
+                    Thread.sleep(60000);
                 } catch (Exception e)
                 {
                     Log.e(TAG, "Failed to get data from server : " + e.getMessage());
