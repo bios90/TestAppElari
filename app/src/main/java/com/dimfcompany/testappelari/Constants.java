@@ -13,4 +13,5 @@ public class Constants
     public static final String KEY_SIM_ID = "sim_id";
     public static final String KEY_MODEL_OK = "model_ok";
     public static final String KEY_URI_TO_SHOW = "uri_to_show";
+    public static final String KEY_SHOULD_RESTART = "should_restart";
 }

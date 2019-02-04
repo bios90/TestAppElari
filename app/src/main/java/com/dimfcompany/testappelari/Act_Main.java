@@ -153,4 +153,16 @@ public class Act_Main extends AppCompatActivity implements GetDataBReciever.List
                 tv_indicator.setVisibility(View.GONE);
             }
     }
+
+    @Override
+    protected void onDestroy()
+    {
+        getDataBReciever.unregisterListener(this);
+        unregisterReceiver(getDataBReciever);
+        Intent restartIntent = new Intent(Act_Main.this,AppService.class);
+        restartIntent.putExtra(Constants.KEY_SHOULD_RESTART,true);
+        startService(restartIntent);
+
+        super.onDestroy();
+    }
 }

@@ -1,10 +1,14 @@
 package com.dimfcompany.testappelari;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.util.Log;
 import android.widget.Toast;
@@ -15,6 +19,10 @@ import com.dimfcompany.testappelari.networking.retrofit_models.Model_ResponseOk;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
 import retrofit2.Call;
 
 public class AppService extends Service
@@ -23,6 +31,9 @@ public class AppService extends Service
     boolean shouldRun;
     private String simId;
     private AdviatorApi adviatorApi;
+    private Thread thread;
+    private MyRunnable myRunnable;
+
 
     @Nullable
     @Override
@@ -34,43 +45,71 @@ public class AppService extends Service
     @Override
     public int onStartCommand(Intent intent, int flags, int startId)
     {
+        Log.d(TAG, "onStartCommand: Service Started");
+        boolean shouldRestart = intent.getBooleanExtra(Constants.KEY_SHOULD_RESTART, false);
+        if (shouldRestart)
+        {
+            stopSelf();
+        }
         adviatorApi = ((AppClass) getApplication()).getAdviatorApi();
         simId = ((AppClass) getApplication()).getSimImsi();
         shouldRun = true;
-        new Thread(new MyRunnable()).start();
+
+        myRunnable = new MyRunnable();
+        thread = new Thread(myRunnable);
+        thread.start();
         return START_STICKY;
     }
 
     private void checkResponse(final String response)
     {
-        Handler handler = new Handler(Looper.getMainLooper());
-        handler.post(new Runnable()
+        final Model_ResponseOk modelResponseOk = RetrofitConverter.getResponseOkFromString(response);
+        if (modelResponseOk != null)
         {
-            @Override
-            public void run()
+            if ("OK".equals(modelResponseOk.getStatus()))
             {
-                Model_ResponseOk modelResponseOk = RetrofitConverter.getResponseOkFromString(response);
-                if (modelResponseOk != null)
+                Intent okIntnet = new Intent(Constants.ACTION_OK_RECIEVER);
+                okIntnet.putExtra(Constants.KEY_MODEL_OK, modelResponseOk);
+                sendBroadcast(okIntnet);
+            } else
+            {
+                try
                 {
-                    if (modelResponseOk.getStatus().equals("OK"))
+                    Handler handler = new Handler(Looper.getMainLooper());
+                    handler.post(new Runnable()
                     {
-                        Intent okIntnet = new Intent(Constants.ACTION_OK_RECIEVER);
-                        okIntnet.putExtra(Constants.KEY_MODEL_OK,modelResponseOk);
-                        sendBroadcast(okIntnet);
-                    }
-                    else
+                        @Override
+                        public void run()
                         {
                             Toast.makeText(AppService.this, modelResponseOk.getMessage(), Toast.LENGTH_SHORT).show();
                         }
-                }
-                else
+                    });
+                } catch (Exception e)
                 {
-                    //Got something unexpected from server
-                    Toast.makeText(AppService.this, "Got some Error", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
 
+                }
+
+
+            }
+        }
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent)
+    {
+        Log.d(TAG, "onTaskRemoved: Removed called, will try to restart");
+
+        Intent restartIntent = new Intent(getApplicationContext(), this.getClass());
+        restartIntent.setPackage(getPackageName());
+
+        PendingIntent restartServicePendingIntent = PendingIntent.getService(getApplicationContext(), 1, restartIntent, PendingIntent.FLAG_ONE_SHOT);
+        AlarmManager alarmService = (AlarmManager) getApplicationContext().getSystemService(Context.ALARM_SERVICE);
+        alarmService.set(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + 300,
+                restartServicePendingIntent);
+
+        super.onTaskRemoved(rootIntent);
     }
 
     private class MyRunnable implements Runnable
@@ -92,10 +131,9 @@ public class AppService extends Service
 
                     checkResponse(response);
 
-                    Thread.sleep(60000);
+                    Thread.sleep(10000);
                 } catch (Exception e)
                 {
-                    shouldRun = false;
                     Log.e(TAG, "Failed to get data from server : " + e.getMessage());
                 }
             }
